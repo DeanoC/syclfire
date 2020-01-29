@@ -1,15 +1,9 @@
+// License Summary: MIT see LICENSE file
 #include "al2o3_platform/platform.h"
 #include "al2o3_os/file.hpp"
 #include "accel_sycl.hpp"
 #include "fire.hpp"
-#include <curses.h>
-#include <stdlib.h>
-#include <time.h>
-
-#define DELAYSIZE 200
-
-void myrefresh(void);
-void explode(int, int);
+#include "curses.h"
 
 short color_table[] =
 {
@@ -35,7 +29,7 @@ void display(Fire const& world) {
 				}
 			} else {
 				cv = '$';
-				attrset(COLOR_PAIR(6));
+				attrset(COLOR_PAIR(7));
 				mvaddch(y,x, cv);
 			}
 		}
@@ -66,7 +60,7 @@ int main() {
 		Fire world(128, 32);
 		world.init(sycl->getQueue());
 
-		int count = 1;
+		int count = 100;
 		bool cont = true;
 		while (cont)
 		{
@@ -76,9 +70,7 @@ int main() {
 				cont = getch() == ERR;
 			}
 
-			cl::sycl::queue& q = sycl->getQueue();
-
-			world.update(q);
+			world.update(sycl->getQueue());
 
 			if(pdcWindow != nullptr) {
 				world.flushToHost();

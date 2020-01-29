@@ -1,7 +1,3 @@
-//
-// Created by Computer on 23/01/2020.
-//
-
 // License Summary: MIT see LICENSE file
 
 #include "al2o3_platform/platform.h"
@@ -32,7 +28,6 @@ Fire::~Fire() {
 
 namespace {
 struct UpdateTag1;
-struct InitTag1;
 }
 
 void Fire::init(cl::sycl::queue &q) {
