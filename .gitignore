@@ -6,7 +6,8 @@
 *.lo
 *.o
 *.obj
-
+*.ilk
+*.pdb
 # Precompiled Headers
 *.gch
 *.pch
@@ -30,8 +31,5 @@
 *.exe
 *.out
 *.app
-al2o3/al2o3_cmath-build/
-al2o3/al2o3_memory-build/
-al2o3/al2o3_os-build/
-al2o3/al2o3_tinystl-build/
-al2o3/al2o3_os-build/
+al2o3/*-build/
+out_libs/*
