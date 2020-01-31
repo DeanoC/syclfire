@@ -18,6 +18,8 @@ struct Fire {
 
 	uint32_t doubleBufferIndex;
 	cl::sycl::range<2> dataRange;
+	cl::sycl::range<2> downSampleRange;
+
 	cl::sycl::event updateDoneEvent;
 
 
@@ -26,6 +28,7 @@ struct Fire {
 
 	float* hostIntensity;
 	cl::sycl::buffer<float, 2> intensity[2];
+	cl::sycl::buffer<float, 2> downSample;
 };
 
 

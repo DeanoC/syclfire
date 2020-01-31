@@ -13,8 +13,11 @@ auto exception_handler = [] (sycl::exception_list exceptions) {
 	for (std::exception_ptr const& e : exceptions) {
 		try {
 			std::rethrow_exception(e);
-		} catch(std::exception const& e) {
-			LOGERROR("asynchronous exception: %s", e.what());
+		}
+		catch( cl::sycl::exception const e) {
+			LOGERROR("%s", e.what());
+		} catch( std::exception const e) {
+			LOGERROR("%s", e.what());
 		}
 	}
 };
@@ -114,6 +117,18 @@ public:
 			flopsPerCore = 32;
 		}
 
+#if COMPUTECPP_BACKEND_spir64
+		if( !device.supports_backend(detail::device_backend::SPIR) )
+			return 0;
+#endif
+#if COMPUTECPP_BACKEND_spirv64
+		if( !device.supports_backend(detail::device_backend::SPIRV) )
+			return 0;
+#endif
+#if COMPUTECPP_BACKEND_ptx64
+		if( !device.supports_backend(detail::device_backend::PTX) )
+			return 0;
+#endif
 
 		LOGINFO("CUs - %d, cores per CU %d, total FALU %d gpu - %d",
 				cuCount, coresPerCU, cuCount * coresPerCU * flopsPerCore, isGPU);
@@ -144,15 +159,20 @@ AL2O3_EXTERN_C SyclHandle AccelSycl_Create() {
 	range<2> dataRange(dataSize,dataSize);
 	buffer<float, 2> buf(data, dataRange);
 
-	sycl->queue.submit([&](handler &cgh) {
-		auto ptr = buf.get_access<access::mode::read_write>(cgh);
+	try {
+		sycl->queue.submit([&](handler &cgh) {
+			auto ptr = buf.get_access<access::mode::read_write>(cgh);
 
-		cgh.parallel_for<selftestTag>(dataRange, [=](item<2> item) {
-			size_t idx = item.get_id(0);
-			ptr[item.get_id()] = static_cast<float>(idx);
+			cgh.parallel_for<selftestTag>(dataRange, [=](item<2> item) {
+				size_t idx = item.get_id(0);
+				ptr[item.get_id()] = static_cast<float>(idx);
+			});
 		});
-	});
-
+	} catch( cl::sycl::exception const e) {
+		LOGERROR("%s", e.what());
+	} catch( std::exception const e) {
+		LOGERROR("%s", e.what());
+	}
 	/* A host accessor can be used to force an update from the device to the
 	 * host, allowing the data to be checked. */
 	accessor<float, 2, access::mode::read, access::target::host_buffer>

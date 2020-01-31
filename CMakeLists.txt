@@ -19,11 +19,15 @@ set(ProjectName syclfire)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
 set(ComputeCpp_DIR "C:/Program Files/codeplay/computecpp")
-set(COMPUTECPP_BITCODE "ptx64" CACHE STRING "Bitcode type to use as SYCL target in compute++")
-#set(COMPUTECPP_BITCODE "spir64" CACHE STRING "Bitcode type to use as SYCL target in compute++")
+
+# spir64, spirv64, ptx64
+set(_COMPUTECPP_BACKEND "spir64")
+
+set(COMPUTECPP_BITCODE "${_COMPUTECPP_BACKEND}" CACHE STRING "Bitcode type to use as SYCL target in compute++")
 
 project(${ProjectName} C CXX)
 find_package(ComputeCpp REQUIRED)
+add_compile_definitions( _COMPUTECPP_BACKEND COMPUTECPP_BACKEND_${_COMPUTECPP_BACKEND} )
 
 set(Src
 		main.cpp

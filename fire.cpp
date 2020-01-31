@@ -6,19 +6,25 @@
 #include "fire.hpp"
 #include <random>
 
+static int const SuperSampleRate = 8;
+
 Fire::Fire(uint32_t width_, uint32_t height_) :
 		width{width_},
 		height{height_},
 		doubleBufferIndex{0},
 		hostIntensity{(float *) MEMORY_CALLOC(width_ * height_, sizeof(float))},
-		hostNewData{(float*) MEMORY_CALLOC(height_, sizeof(float))},
-		dataRange{height_, width_} {
-
+		hostNewData{(float *) MEMORY_CALLOC(height_ * SuperSampleRate, sizeof(float))},
+		dataRange{height_ * SuperSampleRate, width_ * SuperSampleRate},
+		downSampleRange{ height_, width_ }
+{
 	using namespace cl::sycl;
+
+	LOGINFO("Fire size = %d x %d", dataRange[1], dataRange[0]);
 
 	intensity[0] = buffer<float, 2>{dataRange};
 	intensity[1] = buffer<float, 2>{dataRange};
-	newData = cl::sycl::buffer<float, 1>(cl::sycl::range<1>(height));
+	newData = buffer<float, 1>(cl::sycl::range<1>(dataRange[0] ));
+	downSample = buffer<float, 2>{ downSampleRange };
 }
 
 Fire::~Fire() {
@@ -28,6 +34,7 @@ Fire::~Fire() {
 
 namespace {
 struct UpdateTag1;
+struct DownSamplerTag1;
 }
 
 void Fire::init(cl::sycl::queue &q) {
@@ -46,14 +53,16 @@ void Fire::init(cl::sycl::queue &q) {
 
 void Fire::update(cl::sycl::queue &q) {
 	using namespace cl::sycl;
-	auto const ndr = nd_range<2>{dataRange, range<2>(16,32)};
+	auto const ndr = nd_range<2>{dataRange, range<2>(32, 32)};
+	auto const dsndr = nd_range<2>{downSampleRange, range<2>(16, 32)};
+
 	try {
 		q.submit([&](handler &cgh) {
 			auto newDataPtr = newData.get_access<access::mode::discard_write>(cgh);
 			std::random_device r;
 			std::default_random_engine e1(r());
 			std::uniform_int_distribution<int> uniform_dist(64, 128);
-			for (uint32_t i = 0u; i < height; ++i) {
+			for (uint32_t i = 0u; i < dataRange[0]; ++i) {
 				hostNewData[i] = (float) uniform_dist(e1);
 			}
 			cgh.copy(hostNewData, newDataPtr);
@@ -66,8 +75,8 @@ void Fire::update(cl::sycl::queue &q) {
 
 			cgh.parallel_for<UpdateTag1>(ndr, [=](nd_item<2> item) {
 				id<2> const gid = item.get_global_id();
-				float const c1 = 0.53f;
-				float const c2 = 0.225f;
+				float const c1 = 0.497f;
+				float const c2 = 0.251f;
 
 				int2 const upv = (int2) gid + int2(-1, -1);
 				int2 const downv = (int2) gid + int2(+1, -1);
@@ -92,14 +101,36 @@ void Fire::update(cl::sycl::queue &q) {
 
 		});
 
-		updateDoneEvent = q.submit([&](handler &cgh) {
+		q.submit([&](handler &cgh) {
 			auto src = intensity[doubleBufferIndex ^ 1].get_access<access::mode::read>(cgh);
-			cgh.copy(src, hostIntensity);
+			auto dst = downSample.get_access<access::mode::discard_write>(cgh);
+			cgh.parallel_for<DownSamplerTag1>(dsndr, [=](nd_item<2> item) {
+				id<2> gid = item.get_global_id();
+				float accum = 0;
+				for (int i = 0; i < SuperSampleRate; ++i) {
+					id<2> agid;
+					agid[0] = (gid[0] * SuperSampleRate) + i;
+					agid[1] = (gid[1] * SuperSampleRate);
+					for (int j = 0; j < SuperSampleRate; ++j) {
+						accum += src[agid];
+						agid[1] += 1;
+					}
+				}
+				dst[gid] = accum * (1.0f / (SuperSampleRate*SuperSampleRate));
+			});
 			doubleBufferIndex ^= 1;
 		});
 
-	} catch (std::exception const &e) {
-		LOGERROR("Caught synchronous SYCL exception: %s", e.what());
+
+		updateDoneEvent = q.submit([&](handler &cgh) {
+			auto src = downSample.get_access<access::mode::read>(cgh);
+			cgh.copy(src, hostIntensity);
+		});
+
+	} catch( cl::sycl::exception const e) {
+		LOGERROR("%s", e.what());
+	} catch( std::exception const e) {
+		LOGERROR("%s", e.what());
 	}
 }
 
@@ -108,8 +139,10 @@ void Fire::flushToHost() {
 
 	try {
 		updateDoneEvent.wait_and_throw();
-	} catch (std::exception const &e) {
-		LOGERROR("Caught synchronous SYCL exception: %s", e.what());
+	} catch( cl::sycl::exception const e) {
+		LOGERROR("%s", e.what());
+	} catch( std::exception const e) {
+		LOGERROR("%s", e.what());
 	}
 
 }
